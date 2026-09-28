@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BTC 15-min Live Forecast</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --ink: #1c1c1e; --muted: #6b6b70; --line: #e4e4e0;
+    --actual: #1c1c1e; --fc: #2f6fde; --band: 47,111,222; --ghost: #a0a0a8;
+    --up: #1a8f5a; --down: #c8413b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111113; --panel: #1a1a1d; --ink: #ececef; --muted: #9a9aa2; --line: #2c2c31;
+      --actual: #ececef; --fc: #6d9cff; --band: 109,156,255; --ghost: #5c5c66; --up: #3fc088; --down: #ff6b63; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 24px; margin-bottom: 16px; }
+  h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  .price { font-size: 32px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .muted { color: var(--muted); }
+  .pill { font-size: 12px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .card .k { font-size: 12px; color: var(--muted); }
+  .card .v { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .chart { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px; margin-bottom: 16px; }
+  svg { display: block; width: 100%; height: auto; }
+  svg text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: var(--muted); padding: 4px 8px 6px; }
+  .sw { display: inline-block; width: 18px; height: 3px; vertical-align: middle; margin-right: 6px; border-radius: 2px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
+  h2 { font-size: 14px; margin: 0 0 8px; font-weight: 600; }
+  .tbl { overflow-x: auto; max-height: 420px; overflow-y: auto; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 13px; }
+  th, td { padding: 5px 8px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { position: sticky; top: 0; background: var(--panel); color: var(--muted); font-weight: 500; }
+  .up { color: var(--up); } .down { color: var(--down); }
+  .note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>BTC-USD · 15-minute live forecast</h1>
+    <span class="price" id="price">—</span>
+    <span id="chg" class="muted"></span>
+    <span class="pill" id="status">connecting…</span>
+    <span class="muted" id="countdown"></span>
+  </header>
+
+  <div class="grid">
+    <div class="card"><div class="k">Forecast in 15 min</div><div class="v" id="f15">—</div></div>
+    <div class="card"><div class="k">80% range (15 min)</div><div class="v" id="r15" style="font-size:16px">—</div></div>
+    <div class="card"><div class="k">P(higher in 15 min)</div><div class="v" id="pup">—</div></div>
+    <div class="card"><div class="k">30s volatility</div><div class="v" id="vol">—</div></div>
+  </div>
+
+  <div class="chart">
+    <svg id="chart" viewBox="0 0 1000 380" preserveAspectRatio="none"></svg>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--actual)"></i>Actual (30s closes)</span>
+      <span><i class="sw" style="background:var(--fc)"></i>Forecast path</span>
+      <span><i class="sw" style="background:rgba(var(--band),.35);height:10px"></i>50% / 80% / 95% bands</span>
+      <span><i class="sw" style="background:var(--ghost)"></i>Forecast issued 15 min ago</span>
+    </div>
+  </div>
+
+  <div class="cols">
+    <div class="card">
+      <h2>Next 15 minutes, every 30 seconds</h2>
+      <div class="tbl"><table id="pts"><thead><tr>
+        <th>Time</th><th>+</th><th>Forecast</th><th>80% low</th><th>80% high</th><th>P(up)</th>
+      </tr></thead><tbody></tbody></table></div>
+    </div>
+    <div class="card">
+      <h2>Live scorecard: model vs "no change"</h2>
+      <div class="tbl"><table id="score"><thead><tr>
+        <th>Horizon</th><th>n</th><th>MAE model</th><th>MAE no-change</th><th>Skill</th><th>Direction hit</th><th>80% coverage</th>
+      </tr></thead><tbody></tbody></table></div>
+      <div class="note">Skill = 1 − MAE<sub>model</sub>/MAE<sub>no-change</sub>. Positive means the model beats simply assuming the price
+        stays put. 80% coverage should be close to 80% if the bands are well calibrated. Scores include the backfilled
+        history replay, so they are populated from the start.</div>
+    </div>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const usd = v => v == null ? "—" : "$" + v.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const pct = v => v == null ? "—" : (v * 100).toFixed(1) + "%";
+const hhmmss = t => new Date(t * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit", second: "2-digit"});
+const hhmm = t => new Date(t * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+let S = null, skew = 0;
+
+function draw() {
+  const svg = $("chart");
+  if (!S || !S.bars.length) return;
+  const W = 1000, H = 380, L = 70, R = 12, T = 12, B = 28;
+  const fc = S.forecast, past = S.past_forecast;
+  const now = Date.now() / 1000 + skew;
+  const x0 = S.bars[0].t, x1 = fc ? fc.points.at(-1).t : now + 900;
+  let ys = S.bars.map(b => b.close);
+  if (fc) fc.points.forEach(p => ys.push(p.lo95, p.hi95));
+  if (past) past.points.forEach(p => ys.push(p.mean));
+  if (S.last_price) ys.push(S.last_price);
+  let y0 = Math.min(...ys), y1 = Math.max(...ys), pad = (y1 - y0) * 0.06 || 10;
+  y0 -= pad; y1 += pad;
+  const X = t => L + (t - x0) / (x1 - x0) * (W - L - R);
+  const Y = v => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B);
+  const path = pts => pts.map((p, i) => (i ? "L" : "M") + X(p[0]).toFixed(1) + "," + Y(p[1]).toFixed(1)).join("");
+  let s = "";
+
+  // grid + axes
+  const step = niceStep((y1 - y0) / 5);
+  for (let v = Math.ceil(y0 / step) * step; v <= y1; v += step) {
+    s += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/>`;
+    s += `<text x="${L - 8}" y="${Y(v) + 4}" text-anchor="end">${Math.round(v).toLocaleString()}</text>`;
+  }
+  for (let t = Math.ceil(x0 / 300) * 300; t <= x1; t += 300)
+    s += `<text x="${X(t)}" y="${H - 8}" text-anchor="middle">${hhmm(t)}</text>`;
+
+  if (fc) {
+    const anchor = {t: fc.issued_at, v: fc.base};
+    for (const [lvl, a] of [[95, .12], [80, .18], [50, .28]]) {
+      const up = [[anchor.t, anchor.v], ...fc.points.map(p => [p.t, p["hi" + lvl]])];
+      const dn = fc.points.map(p => [p.t, p["lo" + lvl]]).reverse();
+      s += `<path d="${path(up.concat(dn))}Z" fill="rgba(var(--band),${a})" stroke="none"/>`;
+    }
+    s += `<path d="${path([[anchor.t, anchor.v], ...fc.points.map(p => [p.t, p.mean])])}" fill="none" stroke="var(--fc)" stroke-width="2" stroke-dasharray="5 4"/>`;
+  }
+  if (past) s += `<path d="${path([[past.issued_at, past.base], ...past.points.map(p => [p.t, p.mean])])}" fill="none" stroke="var(--ghost)" stroke-width="1.5" stroke-dasharray="3 3"/>`;
+
+  const act = S.bars.map(b => [b.t, b.close]);
+  if (S.last_price) act.push([Math.min(now, x1), S.last_price]);
+  s += `<path d="${path(act)}" fill="none" stroke="var(--actual)" stroke-width="1.8"/>`;
+  const nx = X(Math.min(now, x1));
+  s += `<line x1="${nx}" x2="${nx}" y1="${T}" y2="${H - B}" stroke="var(--muted)" stroke-dasharray="2 3"/>`;
+  s += `<text x="${nx + 4}" y="${T + 10}">now</text>`;
+  if (S.last_price) s += `<circle cx="${nx}" cy="${Y(S.last_price)}" r="4" fill="var(--actual)"/>`;
+  svg.innerHTML = s;
+}
+
+function niceStep(raw) {
+  const p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p;
+  return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p;
+}
+
+function render() {
+  if (!S) return;
+  $("price").textContent = usd(S.last_price);
+  $("status").textContent = S.error ? "error: " + S.error : S.status;
+  const fc = S.forecast;
+  if (fc) {
+    const last = fc.points.at(-1), d = last.mean - fc.base;
+    $("f15").innerHTML = `${usd(last.mean)} <span class="${d >= 0 ? "up" : "down"}" style="font-size:13px">${d >= 0 ? "+" : ""}${d.toFixed(2)}</span>`;
+    $("r15").textContent = `${usd(last.lo80)} – ${usd(last.hi80)}`;
+    $("pup").textContent = pct(last.p_up);
+    $("vol").textContent = (fc.sigma30 * 1e4).toFixed(2) + " bp";
+    if (S.last_price) {
+      const c = S.last_price - fc.base;
+      $("chg").innerHTML = `<span class="${c >= 0 ? "up" : "down"}">${c >= 0 ? "+" : ""}${c.toFixed(2)}</span> since forecast`;
+    }
+    $("pts").tBodies[0].innerHTML = fc.points.map(p => `<tr>
+      <td>${hhmmss(p.t)}</td><td class="muted">${p.h * 30 >= 60 ? (p.h * 30 / 60) + "m" : p.h * 30 + "s"}</td>
+      <td class="${p.mean >= fc.base ? "up" : "down"}">${usd(p.mean)}</td>
+      <td>${usd(p.lo80)}</td><td>${usd(p.hi80)}</td><td>${pct(p.p_up)}</td></tr>`).join("");
+  }
+  const rows = S.score.filter(r => [1, 2, 4, 10, 20, 30].includes(r.h));
+  $("score").tBodies[0].innerHTML = rows.map(r => {
+    const sk = r.n ? 1 - r.mae_model / r.mae_rw : null;
+    return `<tr><td>${r.h * 30 >= 60 ? r.h * 30 / 60 + " min" : r.h * 30 + " s"}</td><td>${r.n}</td>
+      <td>${r.mae_model == null ? "—" : "$" + r.mae_model.toFixed(2)}</td>
+      <td>${r.mae_rw == null ? "—" : "$" + r.mae_rw.toFixed(2)}</td>
+      <td class="${sk > 0 ? "up" : sk < 0 ? "down" : ""}">${sk == null ? "—" : (sk * 100).toFixed(2) + "%"}</td>
+      <td>${pct(r.hit)}</td><td>${pct(r.cov80)}</td></tr>`;
+  }).join("");
+  draw();
+}
+
+async function tick() {
+  try {
+    const r = await fetch("/api/state", {cache: "no-store"});
+    S = await r.json();
+    skew = S.server_time - Date.now() / 1000;
+    render();
+  } catch (e) { $("status").textContent = "server unreachable"; }
+}
+
+setInterval(() => {
+  if (!S) return;
+  const now = Date.now() / 1000 + skew;
+  const next = (Math.floor(now / 30) + 1) * 30 + 2;
+  $("countdown").textContent = `next update in ${Math.max(0, Math.ceil(next - now))}s`;
+  draw();
+}, 1000);
+tick(); setInterval(tick, 2000);
+</script>
+</body>
+</html>
