@@ -125,7 +125,9 @@ class Engine {
   forecast = null; candleSigma30 = null; status = "starting"; error = null; closedUpto = null;
 
   async get(path) {
-    const r = await fetch(API + path, {cache: "no-store"});
+    // Cache-bust via query param: cache:"no-store" makes Safari send Cache-Control/Pragma
+    // headers, which Coinbase's CORS preflight rejects.
+    const r = await fetch(`${API}${path}&_=${Date.now()}`);
     if (!r.ok) throw new Error(`Coinbase HTTP ${r.status}`);
     return {data: await r.json(), after: r.headers.get("cb-after")};
   }
