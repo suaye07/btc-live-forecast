@@ -9,6 +9,7 @@ It runs entirely in the browser: open the GitHub Pages link, or open `index.html
 - **Scorecard:** every forecast is matched to the realized closes. Skill > 0 means it beats the "no change" baseline, and the 80% coverage should come out close to 80%.
 
 At this horizon BTC is close to a random walk. This is an experiment, not financial advice.
+Link: https://suaye07.github.io/btc-live-forecast/
 
 ## Files
 
